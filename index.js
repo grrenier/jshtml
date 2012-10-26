@@ -6,44 +6,41 @@
 
 var fs = require('fs');
 var assert = require('assert');
-var JsHtmlParser = require('./lib/jshtml/Parser');
-var tools = require('./lib/tools');
-var sjs = require('sjs');
+var JsHtmlParser = require('./lib/JsHtmlParser');
+var util = require('./lib/util');
+
 
 var cache = {};
 
-function compile(template, options) {
+function __express(filename, options, callback, ispartial) {
+    var template = fs.readFileSync(filename, 'utf-8');
+    var buffer = '';
+    var atEnd = false;
 
-	return function(locals)	{
-		var buffer = '';
-		var atEnd = false;
-	
-		function write()	{
-			var argumentCount = arguments.length;
-			for(var argumentIndex = 0; argumentIndex < argumentCount; argumentIndex++){
-				var argument = arguments[argumentIndex];
-				buffer += tools.str(argument);
-			}
-		}
-		function end()	{
-			write.apply(this, arguments);
-			atEnd = true;
-		}
-		
-		compileAsync(template, options).call(this, write, end, locals);
- 
-		assert.ok(atEnd, 'not ended');
-		
-		return buffer;
-	}
+    function write()	{
+            var argumentCount = arguments.length;
+            for(var argumentIndex = 0; argumentIndex < argumentCount; argumentIndex++){
+                    var argument = arguments[argumentIndex];
+                    buffer += util.str(argument);                    
+            }
+    }
+    function end()	{
+            write.apply(this, arguments);
+            atEnd = true;
+    }
+    compileAsync(template, options).call(this, write, end, options || {});
+
+    assert.ok(atEnd, 'not ended');
+    if (ispartial === true) return buffer;
+    callback(null, buffer);
+    return true;
 }
 
 function render(template, options) {
-	var options = tools.extend({}, options);
+	var options = util.extend({}, options);
 	var fn = options.filename 
-		? (cache[options.filename] || (cache[options.filename] = compile(template, options)))
-		: compile(template, options)
-		;
+		? (cache[options.filename] || (cache[options.filename] = __express(template, options, callback)))
+		: __express(template, options, callback);
 	return fn.call(options.scope, options.locals || {});
 }
 
@@ -54,25 +51,19 @@ var cacheAsync = {};
 function compileAsync(template, options) {
 	var fnSrc = '';
 	var parser = new JsHtmlParser(function(data) {
-//console.log(data);
 		fnSrc += data;
 	}, options);
 	parser.end(template);
-
 	if(options.with)	{
 		fnSrc = '{' + fnSrc + '}';
 		var contextList = Array.isArray()
 		? options.with
-		: [options.with]
-		;
+		: [options.with];
 		contextList.forEach(function(context){
 			fnSrc = 'with(' + context + ')' + fnSrc;
 		});
-	}
-
-	console.log(fnSrc);
-
-	var fn = new Function('write', 'end', 'tag', 'writePartial', 'writeBody', 'tools', 'locals', sjs.parse(fnSrc, options));
+	}        
+	var fn = new Function('write', 'end', 'tag', 'writePartial', 'writeBody', 'util', 'locals', fnSrc);
 
 	return function(writeCallback, endCallback, locals) {
 
@@ -96,7 +87,7 @@ function compileAsync(template, options) {
 
 			writeCallback.call(this, '<', tagName);
 			tagAttributeSetList.forEach(function(tagAttributeSet) {
-				writeCallback.call(this, ' ', tools.htmlAttributeEncode(tagAttributeSet));
+				writeCallback.call(this, ' ', util.htmlAttributeEncode(tagAttributeSet));
 			});
 			if(hasContent) {
 				writeCallback.call(this, '>');
@@ -108,7 +99,7 @@ function compileAsync(template, options) {
 						break;
 
 						default:
-						writeCallback.call(this, tools.htmlLiteralEncode(tagContent));
+						writeCallback.call(this, util.htmlLiteralEncode(tagContent));
 					}
 				});
 
@@ -119,20 +110,21 @@ function compileAsync(template, options) {
 			}
 		}
 
-		function writePartial() {
-			writeCallback.call(this, locals.partial.apply(this, arguments));
+		function writePartial() {        
+                       writeCallback.call(this, __express(locals.settings.views + '/' + arguments[0]+'.jshtml', arguments[1] || {}, null, true));
 		}
 
 		function writeBody() {
 			writeCallback.call(this, locals.body);
 		}
 
-		fn.call(this, writeCallback, endCallback, tag, writePartial, writeBody, tools, locals);
+		fn.call(this, writeCallback, endCallback, tag, writePartial, writeBody, util, locals);
 	};
 }
 
-function renderAsync(writeCallback, endCallback, template, options) {
-	var options = tools.extend({}, options);
+function renderAsync(writeCallback, endCallback, filename, options) {
+        var template = fs.readFileSync(filename, 'utf-8');
+	var options = util.extend({}, options);
 	var fn = options.filename 
 		? (cacheAsync[options.filename] || (cacheAsync[options.filename] = compileAsync(template, options)))
 		: compileAsync(template, options)
@@ -150,8 +142,5 @@ require.extensions['.jshtml'] = function(module, fileName) {
 //exports
 exports.compileAsync = compileAsync;
 exports.renderAsync = renderAsync;
-exports.compile = compile;
+exports.__express = __express;
 exports.render = render;
-
-
-
