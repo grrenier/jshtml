@@ -12,7 +12,7 @@ var sjs = require('sjs');
 
 var cache = {};
 
-function __express(filename, options, callback, ispartial) {
+function __express(filename, options, callback) {
     var template = fs.readFileSync(filename, 'utf-8');
     var buffer = '';
     var atEnd = false;
@@ -31,12 +31,12 @@ function __express(filename, options, callback, ispartial) {
     compileAsync(template, options).call(this, write, end, options || {});
 
     assert.ok(atEnd, 'not ended');
-    if (ispartial === true) return buffer;
+    if (callback == null) return buffer;
     callback(null, buffer);
     return true;
 }
 
-function render(template, options) {
+function render(template, options, callback) {
 	var options = tools.extend({}, options);
 	var fn = options.filename 
 		? (cache[options.filename] || (cache[options.filename] = __express(template, options, callback)))
@@ -111,7 +111,7 @@ function compileAsync(template, options) {
 		}
 
 		function writePartial() {        
-                       writeCallback.call(this, __express(locals.settings.views + '/' + arguments[0]+'.jshtml', arguments[1] || {}, null, true));
+                       writeCallback.call(this, __express(locals.settings.views + '/' + arguments[0]+'.jshtml', arguments[1] || {}, null));
 		}
 
 		function writeBody() {
