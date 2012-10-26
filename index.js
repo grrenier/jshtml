@@ -63,7 +63,7 @@ function compileAsync(template, options) {
 			fnSrc = 'with(' + context + ')' + fnSrc;
 		});
 	}        
-	var fn = new Function('write', 'end', 'tag', 'writePartial', 'writeBody', 'tools', 'locals', fnSrc);
+	var fn = new Function('write', 'end', 'tag', 'writePartial', 'writeBody', 'tools', 'locals', sjs.parse(fnSrc, options));
 
 	return function(writeCallback, endCallback, locals) {
 
